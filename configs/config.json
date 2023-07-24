@@ -2,7 +2,7 @@
     "Prefix": "/",
     "MainColor": "#0004ff",
     "ErrorColor": "#ff0000",
-    "ClientID": "1132251498408050688",
-    "Token": "MTEzMjI1MTQ5ODQwODA1MDY4OA.GR3RUd.j_njYXoF3oQXR9Hwk6b3JJjI5hhbtFyH5IvTyM",
-    "OpenAIapiKey": "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"
+    "ClientID": "",
+    "Token": "",
+    "OpenAIapiKey": ""
 }
