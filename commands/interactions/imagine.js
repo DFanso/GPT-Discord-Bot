@@ -34,12 +34,11 @@ module.exports = {
         const ephemeral = ephemeralChoice === 'Enable' ? true : false;
         await interaction.deferReply({ ephemeral: ephemeral });
 
-        const configuration = new openAI.Configuration({ apiKey: config.OpenAIapiKey });
-        const openai = new openAI.OpenAIApi(configuration);
+        const openai = new openAI.OpenAI({ apiKey: config.OpenAIapiKey });
 
         const question = interaction.options.getString("prompt");
 
-        openai.createImage({
+        openai.images.generate({
 
             prompt: question,
             n: 4,
@@ -47,7 +46,7 @@ module.exports = {
 
         }).then(async (response) => {
 
-            const data = response.data.data;
+            const data = response.data;
 
             const embeds = [
 
@@ -111,7 +110,7 @@ module.exports = {
                         name: question.length > 256 ? question.substring(0, 253) + "..." : question,
                         iconURL: interaction.user.displayAvatarURL()
                     })
-                    .setDescription(error.response.data.error.message);
+                    .setDescription(error.response.error.message.length > 4096 ? error.response.error.message.substring(0, 4093) + "..." : error.response.error.message);
 
                 await interaction.editReply({ embeds: [embed] }).catch(() => null);
 
@@ -123,7 +122,7 @@ module.exports = {
                         name: question.length > 256 ? question.substring(0, 253) + "..." : question,
                         iconURL: interaction.user.displayAvatarURL()
                     })
-                    .setDescription(error.message);
+                    .setDescription(error.message.length > 4096 ? error.message.substring(0, 4093) + "..." : error.message);
 
                 await interaction.editReply({ embeds: [embed] }).catch(() => null);
 

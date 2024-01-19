@@ -21,16 +21,16 @@ module.exports = async (client, message) => {
 
         if (logChannel?.permissionsFor(message.guild.members.me).has("ViewChannel", "SendMessages", "EmbedLinks")) {
 
-            const configuration = new openAI.Configuration({ apiKey: config.OpenAIapiKey });
-            const openai = new openAI.OpenAIApi(configuration);
+            const openai = new openAI.OpenAI({ apiKey: config.OpenAIapiKey });
 
-            openai.createModeration({
+            openai.moderations.create({
 
+                model: 'text-moderation-stable',
                 input: message.content
 
             }).then(async (response) => {
 
-                const data = response.data.results[0];
+                const data = response.results[0];
                 if (data.flagged) {
 
                     const flags = func.flagCheck(data.categories);
@@ -256,126 +256,127 @@ module.exports = async (client, message) => {
 
         await message.channel.sendTyping();
 
-        const configuration = new openAI.Configuration({ apiKey: config.OpenAIapiKey });
-        const openai = new openAI.OpenAIApi(configuration);
+        const openai = new openAI.OpenAI({ apiKey: config.OpenAIapiKey });
 
         const question = message.content;
-        openai.createModeration({
 
-            input: question
+        const completionPrompt = fs.readFileSync("./utils/prompts/completion.txt", "utf-8");
+        const prompt = completionPrompt.replaceAll('{botUsername}', client.user.username);
+
+        let messages = [{
+            "role": "system",
+            "content": prompt
+        }];
+
+        let oldMessages;
+        if (conversations.has(message.author.id)) oldMessages = conversations.get(message.author.id);
+        if (oldMessages) {
+
+            while (func.tokenizer('gpt-3.5', oldMessages).tokens >= 512) {
+
+                let sliceLength = oldMessages.length * -0.5
+                if (sliceLength % 2 !== 0) sliceLength--
+                oldMessages = oldMessages.slice(sliceLength)
+                conversations.set(message.author.id, oldMessages);
+
+            };
+
+            messages = messages.concat(oldMessages);
+
+        };
+
+        messages.push({
+            "role": "user",
+            "content": question
+        });
+
+        openai.chat.completions.create({
+
+            model: 'gpt-3.5-turbo',
+            messages: messages,
+            max_tokens: func.tokenizer('gpt-3.5', messages).maxTokens,
+            temperature: settings.completion.temprature,
+            top_p: settings.completion.top_p,
+            frequency_penalty: settings.completion.frequency_penalty,
+            presence_penalty: settings.completion.presence_penalty,
+            stream: true
 
         }).then(async (response) => {
 
-            const data = response.data.results[0];
-            if (data.flagged) await message.reply({ content: `Your request was rejected as a result of our safety system. Your prompt may contain text that is not allowd by our safety system\n\n**Flags:** ${func.flagCheck(data.categories).trueFlags}` });
-            else {
+            let fullAnswer = "";
+            let answer = "";
+            let newMessage = message;
 
-                const chatGPTprompt = fs.readFileSync("./utils/prompts/chatCompletion.txt", "utf-8");
-                const prompt = chatGPTprompt.replaceAll('{botUsername}', client.user.username);
+            for await (const part of response) {
 
-                let messages = [{
-                    "role": "system",
-                    "content": prompt
-                }];
+                if (part.choices[0]?.finish_reason === 'stop') {
 
-                console.log(func.tokenizer('chatgpt', messages).tokens);
+                    await message.channel.sendTyping();
 
-                let oldMessages;
-                if (conversations.has(message.author.id)) oldMessages = conversations.get(message.author.id);
-                if (oldMessages) {
+                    const newDataArray = [
+                        {
+                            "role": "user",
+                            "content": question
+                        },
+                        {
+                            "role": "assistant",
+                            "content": fullAnswer
+                        }
+                    ];
 
-                    while (func.tokenizer('chatgpt', oldMessages).tokens >= 512) {
+                    if (conversations.has(message.author.id)) {
+                        const oldConversation = conversations.get(message.author.id);
+                        conversations.set(message.author.id, oldConversation.concat(newDataArray));
+                    } else {
+                        conversations.set(message.author.id, newDataArray);
+                    };
 
-                        let sliceLength = oldMessages.length * -0.5
-                        if (sliceLength % 2 !== 0) sliceLength--
-                        oldMessages = oldMessages.slice(sliceLength)
-                        conversations.set(message.author.id, oldMessages);
+                    if (answer.length <= 2000) {
+
+                        newMessage = await newMessage.reply({ content: answer });
+
+                    } else {
+
+                        const attachment = new Discord.AttachmentBuilder(
+                            Buffer.from(answer, 'utf-8'),
+                            { name: 'response.txt' }
+                        );
+
+                        await newMessage.reply({ files: [attachment] });
 
                     };
 
-                    messages = messages.concat(oldMessages);
+                } else {
 
-                };
+                    if (answer.includes('\n\n')) {
 
-                messages.push({
-                    "role": "user",
-                    "content": question
-                });
+                        await message.channel.sendTyping();
 
-                console.log(func.tokenizer('chatgpt', messages).tokens);
+                        if (answer.length <= 2000) {
 
-                openai.createChatCompletion({
+                            newMessage = await newMessage.reply({ content: answer });
 
-                    model: 'gpt-3.5-turbo',
-                    messages: messages,
-                    max_tokens: func.tokenizer('chatgpt', messages).maxTokens,
-                    temperature: settings.completion.temprature,
-                    top_p: settings.completion.top_p,
-                    frequency_penalty: settings.completion.frequency_penalty,
-                    presence_penalty: settings.completion.presence_penalty
+                        } else {
 
-                }).then(async (response) => {
+                            const attachment = new Discord.AttachmentBuilder(
+                                Buffer.from(answer, 'utf-8'),
+                                { name: 'response.txt' }
+                            );
 
-                    const answer = response.data.choices[0].message.content;
-
-                    openai.createModeration({
-
-                        input: answer
-
-                    }).then(async (response) => {
-
-                        const data = response.data.results[0];
-                        if (data.flagged) await message.reply({ content: `Your request was rejected as a result of our safety system. Your prompt may contain text that is not allowd by our safety system\n\n**Flags:** ${func.flagCheck(data.categories).trueFlags}` });
-                        else {
-
-                            const newDataArray = [
-                                {
-                                    "role": "user",
-                                    "content": question
-                                },
-                                {
-                                    "role": "assistant",
-                                    "content": answer
-                                }
-                            ];
-
-                            if (conversations.has(message.author.id)) {
-                                const oldConversation = conversations.get(message.author.id);
-                                conversations.set(message.author.id, oldConversation.concat(newDataArray));
-                            } else {
-                                conversations.set(message.author.id, newDataArray);
-                            };
-
-                            if (answer.length <= 2000) await message.reply({ content: answer });
-                            else {
-
-                                const attachment = new Discord.AttachmentBuilder(
-                                    Buffer.from(`Question: ${question}\n\n${answer}`, 'utf-8'),
-                                    { name: 'response.txt' }
-                                );
-                                await message.reply({ files: [attachment] });
-
-                            };
+                            await newMessage.reply({ files: [attachment] });
 
                         };
 
-                    }).catch(async (error) => {
+                        answer = "";
+                        await func.delay(5000);
 
-                        console.error(chalk.bold.redBright(error));
 
-                        if (error.response) await message.reply({ content: error.response.data.error.message });
-                        else if (error.message) await message.reply({ content: error.message });
+                    };
 
-                    });
+                    answer += part.choices[0]?.delta?.content || '';
+                    fullAnswer += part.choices[0]?.delta?.content || '';
 
-                }).catch(async (error) => {
-
-                    console.error(chalk.bold.redBright(error));
-
-                    if (error.response) await message.reply({ content: error.response.data.error.message });
-                    else if (error.message) await message.reply({ content: error.message });
-
-                });
+                };
 
             };
 
@@ -383,8 +384,8 @@ module.exports = async (client, message) => {
 
             console.error(chalk.bold.redBright(error));
 
-            if (error.response) await message.reply({ content: error.response.data.error.message });
-            else if (error.message) await message.reply({ content: error.message });
+            if (error.response) await message.reply({ content: error.response.error.message.length > 4000 ? error.response.error.message.substring(0, 3097) + "..." : error.response.error.message });
+            else if (error.message) await message.reply({ content: error.message.length > 4000 ? error.message.substring(0, 3097) + "..." : error.message });
 
         });
 

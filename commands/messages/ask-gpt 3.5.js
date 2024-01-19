@@ -7,9 +7,9 @@ const settings = require('../../utils/settings');
 const config = require('../../configs/config.json');
 
 module.exports = {
-    name: "Translate",
-    aliases: ['T'],
-    description: "Translate your texts from any language to English!",
+    name: "Ask",
+    aliases: ['A', 'GPT3.5', 'GPT-3.5'],
+    description: "Answers your questions using __GPT-3.5__ model! **(Cheaper)**",
 
     async execute(client, message, args, cmd) {
 
@@ -20,8 +20,7 @@ module.exports = {
             const embed = new Discord.EmbedBuilder()
                 .setColor(config.ErrorColor)
                 .setTitle('Error')
-                .setDescription(`You can't use the \`${cmd}\` command like this you have to provide something like the example\n\`\`\`\n${config.Prefix}${cmd} Salut bonne matinée
-                .\n\`\`\``);
+                .setDescription(`You can't use the \`${cmd}\` command like this you have to provide something like the example\n\`\`\`\n${config.Prefix}${cmd} Explain loops in JavaScript.\n\`\`\``);
 
             await message.reply({ embeds: [embed] });
 
@@ -31,10 +30,8 @@ module.exports = {
 
             const question = args.join(" ");
 
-            const language = 'English';
-            const translatorPrompt = fs.readFileSync("./utils/prompts/translator.txt", "utf-8")
-            const prompt = translatorPrompt.replaceAll('{language}', language);
-
+            const completionPrompt = fs.readFileSync("./utils/prompts/completion.txt", "utf-8");
+            const prompt = completionPrompt.replaceAll('{botUsername}', client.user.username);
             const messages = [
                 {
                     "role": "system",
@@ -51,10 +48,10 @@ module.exports = {
                 model: 'gpt-3.5-turbo',
                 messages: messages,
                 max_tokens: func.tokenizer('gpt-3.5', messages).maxTokens,
-                temperature: settings.translator.temprature,
-                top_p: settings.translator.top_p,
-                frequency_penalty: settings.translator.frequency_penalty,
-                presence_penalty: settings.translator.presence_penalty
+                temperature: settings.completion.temprature,
+                top_p: settings.completion.top_p,
+                frequency_penalty: settings.completion.frequency_penalty,
+                presence_penalty: settings.completion.presence_penalty
 
             }).then(async (response) => {
 
@@ -83,6 +80,7 @@ module.exports = {
                         Buffer.from(`${question}\n\n${answer}`, 'utf-8'),
                         { name: 'response.txt' }
                     );
+
                     await message.reply({ files: [attachment] });
 
                 };
