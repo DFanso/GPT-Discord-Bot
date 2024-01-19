@@ -3,6 +3,7 @@ const openAI = require('openai');
 const chalk = require('chalk');
 const func = require('../../utils/functions');
 const config = require('../../configs/config.json');
+const { readQuestionCounts, writeQuestionCounts } = require('../../utils/qCount');
 
 module.exports = {
     data: new Discord.SlashCommandBuilder()
@@ -29,6 +30,17 @@ module.exports = {
         ),
 
     async execute(client, interaction) {
+
+        const userId = interaction.user.id;
+        const userCounts = readQuestionCounts();
+        const currentCount = userCounts[userId] || 0;
+        const questionLimit = config.QCount;
+
+        if (currentCount >= questionLimit) {
+            await interaction.reply({ content: 'You have reached your daily question limit.', ephemeral: true });
+            return;
+        }
+
 
         const ephemeralChoice = interaction.options.getString('ephemeral');
         const ephemeral = ephemeralChoice === 'Enable' ? true : false;
@@ -129,6 +141,9 @@ module.exports = {
             };
 
         });
+
+        userCounts[userId] = currentCount + 1;
+        writeQuestionCounts(userCounts);
 
     },
 

@@ -37,6 +37,16 @@ module.exports = {
 
     async execute(client, interaction) {
 
+        const userId = interaction.user.id;
+        const userCounts = readQuestionCounts();
+        const currentCount = userCounts[userId] || 0;
+        const questionLimit = config.QCount;
+
+        if (currentCount >= questionLimit) {
+            await interaction.reply({ content: 'You have reached your daily question limit.', ephemeral: true });
+            return;
+        }
+
         const ephemeralChoice = interaction.options.getString('ephemeral');
         const ephemeral = ephemeralChoice === 'Enable' ? true : false;
         await interaction.deferReply({ ephemeral: ephemeral });
@@ -134,7 +144,8 @@ module.exports = {
         });
 
 
-
+        userCounts[userId] = currentCount + 1;
+        writeQuestionCounts(userCounts);
 
 
     },
